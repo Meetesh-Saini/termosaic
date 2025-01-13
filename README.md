@@ -3,7 +3,7 @@ Print images on terminal
 
 ## Install Dependencies:
 ```
-pip install Pillow numpy
+pip install numpy opencv-python
 ```
 
 ## Usage

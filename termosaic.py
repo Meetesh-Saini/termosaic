@@ -3,8 +3,8 @@ import os
 import shutil
 from enum import Enum
 
+import cv2
 import numpy as np
-from PIL import Image
 
 
 class Format(Enum):
@@ -132,15 +132,31 @@ def get_terminal_size():
         raise Exception("cannot detect the terminal size")
 
 
-def resize_image(image_path, max_width, max_height):
-    # Resizes image maintaining aspect ratio
-    try:
-        img = Image.open(image_path)
-        img = img.convert("RGB")
-    except FileNotFoundError:
+def open_image(image_path):
+    img = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+
+    if img is None:
         raise Exception(f"Image file not found at {image_path}")
 
-    original_width, original_height = img.size
+    # Convert image RGBA to RGB
+    if img.shape[2] == 4:
+        img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)
+    # Convert image Grayscale to RGB
+    elif img.shape[2] == 1:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+    elif img.shape[2] == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    else:
+        raise ValueError("unknown image format")
+
+    return img
+
+
+def resize_image(image_path, max_width, max_height):
+    # Resizes image maintaining aspect ratio
+    img = open_image(image_path)
+
+    original_height, original_width = img.shape[:2]
 
     if original_width <= max_width and original_height <= max_height:
         return img
@@ -152,10 +168,9 @@ def resize_image(image_path, max_width, max_height):
     new_width = int(original_width * scale_ratio)
     new_height = int(original_height * scale_ratio)
 
-    try:
-        resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-    except AttributeError:
-        resized_img = img.resize((new_width, new_height), Image.LANCZOS)
+    resized_img = cv2.resize(
+        img, (new_width, new_height), interpolation=cv2.INTER_LANCZOS4
+    )
     return resized_img
 
 
