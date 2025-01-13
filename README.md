@@ -1,5 +1,5 @@
 # termosaic
-Print images on terminal
+Print images or videos (play) on terminal
 
 ## Install Dependencies:
 ```
@@ -8,7 +8,7 @@ pip install numpy opencv-python
 
 ## Usage
 ```
-python3 termosaic.py examples/gnu.jpg
+python3 termosaic.py -f i examples/gnu.jpg
 ```
 **Output on terminal**
 ![](examples/gnu-term.png)
@@ -19,7 +19,7 @@ python3 termosaic.py examples/gnu.jpg
 
 ## Another example
 ```
-python3 termosaic.py examples/walter-white.jpg
+python3 termosaic.py -f i examples/walter-white.jpg
 ```
 **Output on terminal**
 ![](examples/walter-white-term.png)
@@ -28,3 +28,8 @@ python3 termosaic.py examples/walter-white.jpg
 **Original image**
 ![](examples/walter-white.jpg)
 
+
+## Play Videos
+```
+python3 termosaic.py -f v examples/rick-roll.mp4
+```

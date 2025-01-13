@@ -1,8 +1,8 @@
 import argparse
 import os
 import shutil
-from enum import Enum
 import sys
+from enum import Enum
 
 import cv2
 import numpy as np
@@ -59,7 +59,9 @@ def colors_type(value):
         )
 
 
-parser = argparse.ArgumentParser(description="Print images on terminal")
+parser = argparse.ArgumentParser(
+    description="Print images or videos (play) on terminal"
+)
 
 parser.add_argument(
     "-f",
@@ -132,6 +134,14 @@ def get_terminal_size():
     except Exception:
         raise Exception("cannot detect the terminal size")
 
+
+def get_adjusted_size(terminal_size):
+    terminal_width, terminal_height = terminal_size
+    max_image_width = terminal_width // 2
+    max_image_height = terminal_height
+    return max_image_width, max_image_height
+
+
 def make_lookup_colors(color_mode):
     color_map = EXTENDED_256_COLORS
     escape_prefix = "\033[38;5;"
@@ -144,10 +154,14 @@ def make_lookup_colors(color_mode):
     color_keys = np.array(list(color_map.keys()))  # Shape (N, 3)
     color_values = np.array(list(color_map.values()))  # Shape (N,)
 
+    # Convert RGB to BGR for opencv
+    color_keys[:, 0], color_keys[:, 2] = color_keys[:, 2], color_keys[:, 0].copy()
+
     # Convert color values to ANSI escape codes
     color_values = np.char.add(np.char.add(escape_prefix, color_values), escape_suffix)
 
     return color_keys, color_values
+
 
 def open_image(image_path):
     img = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
@@ -155,24 +169,34 @@ def open_image(image_path):
     if img is None:
         raise Exception(f"Image file not found at {image_path}")
 
-    # Convert image RGBA to RGB
+    img = transform_channels(img)
+    return img
+
+
+def open_video(video_path):
+    cap = cv2.VideoCapture(video_path)
+
+    if not cap.isOpened():
+        raise Exception(f"Could not open video {video_path}")
+
+    return cap
+
+
+def transform_channels(img):
+    # Convert image RGBA to BGR
     if img.shape[2] == 4:
-        img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)
-    # Convert image Grayscale to RGB
+        img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+    # Convert image Grayscale to BGR
     elif img.shape[2] == 1:
-        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-    elif img.shape[2] == 3:
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    else:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    elif img.shape[2] != 3:
         raise ValueError("unknown image format")
 
     return img
 
 
-def resize_image(image_path, max_width, max_height):
+def resize_image(img, max_width, max_height):
     # Resizes image maintaining aspect ratio
-    img = open_image(image_path)
-
     original_height, original_width = img.shape[:2]
 
     if original_width <= max_width and original_height <= max_height:
@@ -218,40 +242,52 @@ def print_matrix(color_matrix):
     reset_color = "\033[0m"
     sys.stdout.write(home_position)
     sys.stdout.write(result)
-    sys.stdout.write(reset_color)
+    sys.stdout.write(reset_color + "\n")
     sys.stdout.flush()
 
 
-def process_image(image_path, color_mode):
-    terminal_size = get_terminal_size()
-    if terminal_size is None:
-        print("Not a terminal, cannot process image for display.")
-        return
+def process_image(image_path, color_mode, terminal_size):
+    img = open_image(image_path)
+    max_image_width, max_image_height = get_adjusted_size(terminal_size)
+    color_keys, color_values = make_lookup_colors(color_mode)
 
-    terminal_width, terminal_height = terminal_size
-    max_image_width = terminal_width // 2
-    max_image_height = terminal_height
+    resized_image = resize_image(img, max_image_width, max_image_height)
 
-    resized_image = resize_image(image_path, max_image_width, max_image_height)
-
-    color_keys, color_values =  make_lookup_colors(color_mode)
-
-    # numpy array (height, width, RGB)
-    image_matrix_3d = np.array(resized_image)
-    color_matrix_2d = map_to_nearest_colors(image_matrix_3d, color_keys, color_values)
+    # numpy array (height, width, RGB) to (lines, column)
+    color_matrix_2d = map_to_nearest_colors(resized_image, color_keys, color_values)
     print_matrix(color_matrix_2d)
 
 
+def process_video(video_path, color_mode, terminal_size):
+    video = open_video(video_path)
+    max_image_width, max_image_height = get_adjusted_size(terminal_size)
+    color_keys, color_values = make_lookup_colors(color_mode)
+
+    while True:
+        ret, frame = video.read()
+        if not ret:
+            break
+
+        frame_resized = resize_image(frame, max_image_width, max_image_height)
+        color_matrix_2d = map_to_nearest_colors(frame_resized, color_keys, color_values)
+        print_matrix(color_matrix_2d)
+
+
 def main():
+    terminal_size = get_terminal_size()
+    if terminal_size is None:
+        print("Not a terminal, cannot process further for display.")
+        return
+
     args = parser.parse_args()
     filepath = args.filename
     color_mode_selected = args.colors
     file_format = args.format
 
     if file_format == Format.VIDEO:
-        raise NotImplementedError("video support is not implemented yet.")
-
-    process_image(filepath, color_mode=color_mode_selected)
+        process_video(filepath, color_mode_selected, terminal_size)
+    elif file_format == Format.IMAGE:
+        process_image(filepath, color_mode_selected, terminal_size)
 
 
 if __name__ == "__main__":
