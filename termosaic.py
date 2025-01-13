@@ -1,9 +1,91 @@
+import argparse
 import os
 import shutil
-from PIL import Image
+from enum import Enum
+
 import numpy as np
-import math
-import sys
+from PIL import Image
+
+
+class Format(Enum):
+    IMAGE = "i"
+    VIDEO = "v"
+
+    def valid(self):
+        if self == Format.IMAGE:
+            return {"img", "image", "i"}
+        elif self == Format.VIDEO:
+            return {"vid", "video", "v"}
+
+
+class Colors(Enum):
+    EXTENDED = "256"
+    BASIC = "16"
+
+    def valid(self):
+        if self == Colors.EXTENDED:
+            return {"256", "full", "all", "extended"}
+        elif self == Colors.BASIC:
+            return {"16", "half", "some", "basic"}
+
+
+# Handle argument parsing
+
+
+# Format type argument handler
+def format_type(value):
+    value_lower = value.lower()
+    if value_lower in Format.IMAGE.valid():
+        return Format.IMAGE
+    elif value_lower in Format.VIDEO.valid():
+        return Format.VIDEO
+    else:
+        raise argparse.ArgumentTypeError(
+            f"Invalid value for --format: '{value}'. Valid values are: {Format.IMAGE.valid()} for images and {Format.VIDEO.value()} for videos."
+        )
+
+
+# Colors type argument handler
+def colors_type(value):
+    value_lower = value.lower()
+    if value_lower in Colors.EXTENDED.valid():
+        return Colors.EXTENDED
+    elif value_lower in Colors.BASIC.valid():
+        return Colors.BASIC
+    else:
+        raise argparse.ArgumentTypeError(
+            f"Invalid value for --colors: '{value}'. Valid values are: {Colors.EXTENDED.valid()} for 256 colors or {Colors.BASIC.valid()} for 16 colors."
+        )
+
+
+parser = argparse.ArgumentParser(description="Print images on terminal")
+
+parser.add_argument(
+    "-f",
+    "--format",
+    type=format_type,
+    required=True,
+    help=(
+        "Specify the format type. Valid values are case-insensitive: "
+        f"{Format.IMAGE.valid()} for images or {Format.VIDEO.valid()} for videos."
+    ),
+)
+
+parser.add_argument(
+    "-c",
+    "--colors",
+    type=colors_type,
+    help=(
+        "Specify the color depth. Valid values are case-insensitive: "
+        f"{Colors.EXTENDED.valid()} for 256 colors or {Colors.BASIC.valid()} for 16 colors."
+    ),
+    default="256",
+)
+
+parser.add_argument(
+    "filename",
+    help="Specify the filename (required positional argument).",
+)
 
 # Constants for basic 16 terminal color codes (ANSI)
 BASIC_16_COLORS = {
@@ -77,12 +159,12 @@ def resize_image(image_path, max_width, max_height):
     return resized_img
 
 
-def map_to_nearest_colors(image_matrix, color_mode="256"):
+def map_to_nearest_colors(image_matrix, color_mode):
     color_map = EXTENDED_256_COLORS
     escape_prefix = "\033[38;5;"
     escape_suffix = f"m{BLOCK}{BLOCK}"
 
-    if color_mode == "16":
+    if color_mode == Colors.BASIC:
         color_map = BASIC_16_COLORS
         escape_prefix = "\033["
 
@@ -118,7 +200,7 @@ def print_matrix(color_matrix):
     print(result, reset_color, sep="")
 
 
-def process_image(image_path, color_mode="256"):
+def process_image(image_path, color_mode):
     terminal_size = get_terminal_size()
     if terminal_size is None:
         print("Not a terminal, cannot process image for display.")
@@ -136,22 +218,21 @@ def process_image(image_path, color_mode="256"):
     print_matrix(color_matrix_2d)
 
 
-def print_help():
-    print(f"Usage: {sys.argv[0]} [filename] [256|16]\nDefault mode is 256.")
+def main():
+    args = parser.parse_args()
+    filepath = args.filename
+    color_mode_selected = args.colors
+    file_format = args.format
+
+    if file_format == Format.VIDEO:
+        raise NotImplementedError("video support is not implemented yet.")
+
+    process_image(filepath, color_mode=color_mode_selected)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        exit(1)
-    image_file = sys.argv[1]
-    color_mode_selected = "256"
-    if len(sys.argv) > 2:
-        if sys.argv[2] not in ["256", "16"]:
-            print_help()
-            exit(1)
-        color_mode_selected = sys.argv[2]
     try:
-        process_image(image_file, color_mode=color_mode_selected)
+        main()
     except Exception as e:
         print(e)
         exit(1)
