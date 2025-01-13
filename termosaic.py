@@ -2,6 +2,7 @@ import argparse
 import os
 import shutil
 from enum import Enum
+import sys
 
 import cv2
 import numpy as np
@@ -131,6 +132,22 @@ def get_terminal_size():
     except Exception:
         raise Exception("cannot detect the terminal size")
 
+def make_lookup_colors(color_mode):
+    color_map = EXTENDED_256_COLORS
+    escape_prefix = "\033[38;5;"
+    escape_suffix = f"m{BLOCK}{BLOCK}"
+
+    if color_mode == Colors.BASIC:
+        color_map = BASIC_16_COLORS
+        escape_prefix = "\033["
+
+    color_keys = np.array(list(color_map.keys()))  # Shape (N, 3)
+    color_values = np.array(list(color_map.values()))  # Shape (N,)
+
+    # Convert color values to ANSI escape codes
+    color_values = np.char.add(np.char.add(escape_prefix, color_values), escape_suffix)
+
+    return color_keys, color_values
 
 def open_image(image_path):
     img = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
@@ -174,21 +191,7 @@ def resize_image(image_path, max_width, max_height):
     return resized_img
 
 
-def map_to_nearest_colors(image_matrix, color_mode):
-    color_map = EXTENDED_256_COLORS
-    escape_prefix = "\033[38;5;"
-    escape_suffix = f"m{BLOCK}{BLOCK}"
-
-    if color_mode == Colors.BASIC:
-        color_map = BASIC_16_COLORS
-        escape_prefix = "\033["
-
-    color_keys = np.array(list(color_map.keys()))  # Shape (N, 3)
-    color_values = np.array(list(color_map.values()))  # Shape (N,)
-
-    # Convert color values to ANSI escape codes
-    color_values = np.char.add(np.char.add(escape_prefix, color_values), escape_suffix)
-
+def map_to_nearest_colors(image_matrix, color_keys, color_values):
     # Reshape to (H*W, 3)
     h, w, _ = image_matrix.shape
     flat_pixels = image_matrix.reshape(-1, 3)  # Shape (H*W, 3)
@@ -211,8 +214,12 @@ def map_to_nearest_colors(image_matrix, color_mode):
 def print_matrix(color_matrix):
     joined_rows = np.apply_along_axis("".join, axis=1, arr=color_matrix)
     result = "\n".join(joined_rows)
+    home_position = "\033[H"
     reset_color = "\033[0m"
-    print(result, reset_color, sep="")
+    sys.stdout.write(home_position)
+    sys.stdout.write(result)
+    sys.stdout.write(reset_color)
+    sys.stdout.flush()
 
 
 def process_image(image_path, color_mode):
@@ -227,9 +234,11 @@ def process_image(image_path, color_mode):
 
     resized_image = resize_image(image_path, max_image_width, max_image_height)
 
+    color_keys, color_values =  make_lookup_colors(color_mode)
+
     # numpy array (height, width, RGB)
     image_matrix_3d = np.array(resized_image)
-    color_matrix_2d = map_to_nearest_colors(image_matrix_3d, color_mode)
+    color_matrix_2d = map_to_nearest_colors(image_matrix_3d, color_keys, color_values)
     print_matrix(color_matrix_2d)
 
 
